@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assessRisk, createFilter } from '../src/filters.js';
+import { assessRisk, createFilter, screenSeller } from '../src/filters.js';
 
 const screen = createFilter();
 
@@ -45,10 +45,66 @@ test('allowUntested opt-in lets through untested gear', () => {
   assert.equal(lenient(listing('RTX 3080 untested')).ok, true);
 });
 
-test('risk assessment flags weak sellers, absurd discounts and auctions', () => {
-  assert.deepEqual(assessRisk({ seller: { feedbackScore: 500, feedbackPercentage: 99 } }, {}, 0.3), []);
-  assert.match(assessRisk({ seller: { feedbackScore: 2, feedbackPercentage: 100 } }, {}, 0.3)[0], /only 2 feedback/);
-  assert.match(assessRisk({ seller: { feedbackScore: 900, feedbackPercentage: 80 } }, {}, 0.3)[0], /80%/);
-  assert.match(assessRisk({ seller: { feedbackScore: 900, feedbackPercentage: 99 } }, {}, 0.9)[0], /too good to be true/);
-  assert.match(assessRisk({ isAuction: true, seller: { feedbackScore: 900, feedbackPercentage: 99 } }, {}, 0.3)[0], /auction/);
+test('blocks bare chips, dies and stripped boards', () => {
+  for (const title of [
+    'NVIDIA RTX 3080 GPU chip BGA',
+    'RTX 3080 GPU core only bare die',
+    'RTX 4090 PCB only no GPU',
+    'Ryzen 9 5950X desoldered chip pulled',
+    'RTX 3070 donor board salvage scrap',
+    'GA102 GPU die reballed',
+  ]) {
+    assert.equal(screen(listing(title)).ok, false, `should block: ${title}`);
+  }
+});
+
+test('blocks water blocks that carry the card name', () => {
+  for (const title of [
+    'EK Waterblock for RTX 3080 full cover block',
+    'Bykski GPU block RTX 3090 water cooling',
+    'Alphacool GPU Block RTX 4090',
+  ]) {
+    assert.equal(screen(listing(title)).ok, false, `should block: ${title}`);
+  }
+});
+
+test('keeps real cards whose titles merely mention water cooling', () => {
+  assert.equal(screen(listing('EVGA RTX 3080 FTW3 Hydro Copper graphics card')).ok, true);
+});
+
+test('excludes laptop memory but keeps desktop memory', () => {
+  assert.equal(screen(listing('Samsung 32GB DDR5 5600 SODIMM Laptop Memory')).ok, false);
+  assert.equal(screen(listing('Crucial 16GB DDR4 3200 SO-DIMM Notebook RAM')).ok, false);
+  assert.equal(screen(listing('16GB DDR4 3200 MacBook Pro memory upgrade')).ok, false);
+  assert.equal(screen(listing('Corsair Vengeance 32GB DDR5 6000 Desktop Memory DIMM')).ok, true);
+});
+
+test('the laptop word only disqualifies memory, not other parts', () => {
+  // A desktop CPU pulled from a laptop-adjacent listing is still a desktop CPU.
+  assert.equal(screen(listing('Intel Core i7-12700K CPU for laptop or desktop build')).ok, true);
+});
+
+test('desktop-only screening can be turned off', () => {
+  const lenient = createFilter({ desktopRamOnly: false });
+  assert.equal(lenient(listing('32GB DDR5 5600 SODIMM Laptop Memory')).ok, true);
+});
+
+test('seller screening enforces the 90% floor and rejects no-feedback accounts', () => {
+  assert.equal(screenSeller({ seller: { feedbackScore: 500, feedbackPercentage: 99 } }), null);
+  assert.equal(screenSeller({ seller: { feedbackScore: 3, feedbackPercentage: 100 } }), null, 'few but perfect is fine');
+
+  assert.match(screenSeller({ seller: { feedbackScore: 900, feedbackPercentage: 89.9 } }), /below 90%/);
+  assert.match(screenSeller({ seller: { feedbackScore: 0, feedbackPercentage: 0 } }), /no feedback/);
+  assert.match(screenSeller({ seller: { feedbackScore: null, feedbackPercentage: null } }), /no feedback/);
+  assert.match(screenSeller({ seller: {} }), /no feedback/);
+  assert.match(screenSeller({ seller: { feedbackScore: 40, feedbackPercentage: null } }), /unknown/);
+  // Exactly at the line passes.
+  assert.equal(screenSeller({ seller: { feedbackScore: 120, feedbackPercentage: 90 } }), null);
+});
+
+test('risk assessment still warns about thin feedback, absurd discounts and auctions', () => {
+  assert.deepEqual(assessRisk({ seller: { feedbackScore: 500 } }, {}, 0.3), []);
+  assert.match(assessRisk({ seller: { feedbackScore: 2 } }, {}, 0.3)[0], /only 2 feedback/);
+  assert.match(assessRisk({ seller: { feedbackScore: 900 } }, {}, 0.9)[0], /too good to be true/);
+  assert.match(assessRisk({ isAuction: true, seller: { feedbackScore: 900 } }, {}, 0.3)[0], /auction/);
 });

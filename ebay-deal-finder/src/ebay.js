@@ -108,6 +108,44 @@ export class EbayClient {
     }
     return collected;
   }
+
+  // How many units the seller actually has. item_summary/search does not carry
+  // this, so it costs one extra call — only worth making for a listing that has
+  // already cleared every other rule but is too cheap to qualify on its own.
+  async getAvailableQuantity(itemId) {
+    const token = await this.getToken();
+    const res = await this.fetch(`${this.endpoints.browse}/item/${encodeURIComponent(itemId)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': this.marketplaceId,
+        Accept: 'application/json',
+      },
+    });
+    if (!res.ok) {
+      throw new EbayError(`eBay item lookup failed (${res.status}) for ${itemId}`, { status: res.status });
+    }
+    const json = JSON.parse((await res.text()) || '{}');
+    return readQuantity(json);
+  }
+}
+
+// eBay reports availability as an exact number or a bucketed hint; take the
+// most conservative reading, since the whole point is a floor on total spend.
+function readQuantity(item) {
+  const availability = item.estimatedAvailabilities?.[0];
+  if (!availability) return 1;
+
+  const exact = availability.estimatedAvailableQuantity;
+  if (Number.isFinite(exact) && exact > 0) return exact;
+
+  const remaining = availability.estimatedRemainingQuantity;
+  if (Number.isFinite(remaining) && remaining > 0) return remaining;
+
+  // "MORE_THAN" with a threshold means at least that many.
+  if (availability.availabilityThresholdType === 'MORE_THAN' && Number.isFinite(availability.availabilityThreshold)) {
+    return Math.max(1, availability.availabilityThreshold);
+  }
+  return 1;
 }
 
 // Flattens an eBay item summary into the shape the rest of the pipeline uses.

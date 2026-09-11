@@ -18,16 +18,23 @@
   "valuation": {
     "minSamples": 8,
     "minDiscount": 0.3,
-    "minProfit": 50,
-    "minRoi": 0.3,
+    "minInvestment": 300,
+    "minProfit": 40,
+    "minUnitProfit": 15,
+    "minRoi": 0.25,
     "resalePercentile": 45,
     "feePercent": 13.25,
     "shippingCostByType": { "cpu": 6, "gpu": 18, "ram": 6 }
   },
 
+  "filters": {
+    "desktopRamOnly": true,
+    "allowUntested": false
+  },
+
   "risk": {
-    "minFeedbackScore": 20,
-    "minFeedbackPercentage": 95,
+    "minFeedbackPercentage": 90,
+    "requireFeedback": true,
     "maxDiscount": 0.8,
     "skipRisky": true
   },
@@ -39,5 +46,6 @@
     "maxPerScan": 25
   },
 
-  "watch": { "intervalMinutes": 30 }
+  "watch": { "intervalMinutes": 30 },
+  "server": { "port": 8787 }
 }

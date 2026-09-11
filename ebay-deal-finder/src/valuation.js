@@ -71,7 +71,7 @@ export function resaleCosts(salePrice, { feePercent = 13.25, fixedFee = 0.4, shi
  * Scores one listing against its comp pool.
  * Returns null when there is not enough market data to have an opinion.
  */
-export function evaluate({ listing, identity, comps, config }) {
+export function evaluate({ listing, identity, comps, config, quantityAvailable = 1 }) {
   const {
     minSamples = 8,
     resalePercentile = 45,
@@ -81,10 +81,14 @@ export function evaluate({ listing, identity, comps, config }) {
     defaultShippingCost = 12,
     assumedShipping = 0,
     supplies = 1.5,
-    minDiscount = 0.25,
+    minDiscount = 0.3,
     minProfit = 40,
+    minUnitProfit = 15,
     minRoi = 0.25,
+    minInvestment = 300,
   } = config ?? {};
+  // How many of this listing you can actually buy (a lot of 5, or 5 in stock).
+  const quantity = Math.max(1, quantityAvailable);
 
   const cleanComps = trimOutliers(comps.filter((v) => Number.isFinite(v) && v > 0));
   if (cleanComps.length < minSamples) {
@@ -104,11 +108,20 @@ export function evaluate({ listing, identity, comps, config }) {
 
   const unitProfit = resale - costs.total - buyPrice;
   const lotSize = Math.max(1, identity.lotSize);
-  const profit = unitProfit * lotSize;
+  // Total units you would end up holding: units per purchase x purchases available.
+  const totalUnits = lotSize * quantity;
+  // What clearing the seller's whole stock costs you.
+  const investment = buyPrice * totalUnits;
+  const profit = unitProfit * totalUnits;
   const roi = unitProfit / buyPrice;
   const discount = (market - buyPrice) / market;
 
-  const isDeal = discount >= minDiscount && profit >= minProfit && roi >= minRoi;
+  const isDeal =
+    discount >= minDiscount &&
+    roi >= minRoi &&
+    unitProfit >= minUnitProfit &&
+    profit >= minProfit &&
+    investment >= minInvestment;
 
   return {
     skipped: false,
@@ -121,6 +134,9 @@ export function evaluate({ listing, identity, comps, config }) {
     roi: Number(roi.toFixed(3)),
     discount: Number(discount.toFixed(3)),
     lotSize,
+    quantityAvailable: quantity,
+    totalUnits,
+    investment: round(investment),
     sampleSize: cleanComps.length,
     costs: {
       fees: round(costs.fees),

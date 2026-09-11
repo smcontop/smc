@@ -6,6 +6,7 @@ import { credentialsFromEnv, loadConfig } from './config.js';
 import { EbayClient } from './ebay.js';
 import { notify } from './notify.js';
 import { FatalScanError, scan } from './scanner.js';
+import { createDealServer, lanAddresses } from './server.js';
 import { Store } from './store.js';
 import { median } from './valuation.js';
 
@@ -15,6 +16,7 @@ eBay PC parts deal finder — flags CPU/GPU/RAM listings priced below market.
 Usage:
   node src/index.js scan [options]     Run one scan
   node src/index.js watch [options]    Scan repeatedly on an interval
+  node src/index.js serve [options]    Open the deal viewer (and keep scanning)
   node src/index.js comps [options]    Show the price data collected so far
 
 Options:
@@ -24,7 +26,9 @@ Options:
   --min-roi <n>         Minimum return on investment, e.g. 0.3 for 30%
   --min-discount <n>    Minimum gap below market, e.g. 0.25 for 25%
   --min-samples <n>     Minimum comparable listings before trusting a price
-  --interval <minutes>  Watch interval (default 30)
+  --interval <minutes>  Watch/serve scan interval (default 30)
+  --port <n>            Port for the viewer (default 8787)
+  --no-scan             With serve: show existing deals, do not scan
   --include-auctions    Also alert on auction listings
   --dry-run             Score everything but send no notifications
   --json                Print machine-readable JSON instead of text
@@ -46,6 +50,8 @@ const OPTIONS = {
   'min-discount': { type: 'string' },
   'min-samples': { type: 'string' },
   interval: { type: 'string' },
+  port: { type: 'string' },
+  'no-scan': { type: 'boolean', default: false },
   'include-auctions': { type: 'boolean', default: false },
   'dry-run': { type: 'boolean', default: false },
   json: { type: 'boolean', default: false },
@@ -78,6 +84,8 @@ async function runScan({ client, config, store, values }) {
   const onlyTypes = values.types ? values.types.split(',').map((t) => t.trim().toLowerCase()) : null;
   const { deals, stats } = await scan({ client, config, store, onlyTypes });
 
+  // The viewer app shows every current deal, not just the newly-found ones.
+  store.saveDeals(deals);
   const fresh = values.renotify ? deals : deals.filter((d) => !store.hasNotified(d.listing.id));
   const capped = fresh.slice(0, config.notifications.maxPerScan);
 
@@ -127,6 +135,56 @@ function showComps(store, values) {
   }
 }
 
+function createClient(config, { required = true } = {}) {
+  const credentials = credentialsFromEnv();
+  if (!credentials.clientId || !credentials.clientSecret) {
+    const message = 'Missing EBAY_CLIENT_ID / EBAY_CLIENT_SECRET. See README.md for how to get them.';
+    if (required) console.error(message);
+    else console.error(`${message} Serving the last saved results only.`);
+    return null;
+  }
+  return new EbayClient({
+    ...credentials,
+    environment: config.environment,
+    marketplaceId: config.marketplaceId,
+  });
+}
+
+async function runServer({ config, store, values }) {
+  const port = Number(values.port ?? process.env.PORT ?? 8787);
+  const scanning = !values['no-scan'];
+  const client = scanning ? createClient(config, { required: false }) : null;
+
+  let scanInFlight = null;
+  const scanOnce = () => {
+    // One scan at a time: a manual refresh during the interval scan joins it.
+    scanInFlight ??= runScan({ client, config, store, values })
+      .catch((err) => {
+        console.error(`Scan failed: ${err.message}`);
+        if (err instanceof FatalScanError) throw err;
+        return { deals: [] };
+      })
+      .finally(() => { scanInFlight = null; });
+    return scanInFlight;
+  };
+
+  const server = createDealServer({ store, config, onScanRequest: client ? scanOnce : null });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '0.0.0.0', resolve);
+  });
+
+  console.error(`\nDeal viewer running:\n  On this PC   http://localhost:${port}`);
+  for (const url of lanAddresses(port)) console.error(`  On your phone ${url}`);
+  console.error(`\n${store.deals().length} deal(s) from the last scan. Ctrl+C to stop.\n`);
+
+  if (client) {
+    const intervalMs = Math.max(1, config.watch.intervalMinutes) * 60_000;
+    await scanOnce();
+    setInterval(() => { scanOnce().catch(() => {}); }, intervalMs);
+  }
+}
+
 async function main() {
   const { values, positionals } = parseArgs({ options: OPTIONS, allowPositionals: true });
   const command = positionals[0] ?? 'scan';
@@ -144,6 +202,11 @@ async function main() {
     return;
   }
 
+  if (command === 'serve') {
+    await runServer({ config, store, values });
+    return;
+  }
+
   if (command !== 'scan' && command !== 'watch') {
     console.error(`Unknown command: ${command}`);
     console.log(USAGE);
@@ -151,18 +214,11 @@ async function main() {
     return;
   }
 
-  const credentials = credentialsFromEnv();
-  if (!credentials.clientId || !credentials.clientSecret) {
-    console.error('Missing EBAY_CLIENT_ID / EBAY_CLIENT_SECRET. See README.md for how to get them.');
+  const client = createClient(config);
+  if (!client) {
     process.exitCode = 1;
     return;
   }
-
-  const client = new EbayClient({
-    ...credentials,
-    environment: config.environment,
-    marketplaceId: config.marketplaceId,
-  });
 
   if (command === 'scan') {
     await runScan({ client, config, store, values });

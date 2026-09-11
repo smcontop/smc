@@ -16,7 +16,8 @@ const deal = {
   identity: { type: 'gpu', model: 'rtx 3080|10gb', lotSize: 1 },
   score: {
     buyPrice: 250, market: 427.5, resale: 425.5, profit: 99.22, roi: 0.397,
-    discount: 0.415, sampleSize: 12, lotSize: 1, costs: { total: 76.28 },
+    discount: 0.415, sampleSize: 12, lotSize: 1, quantityAvailable: 1, totalUnits: 1,
+    investment: 250, costs: { total: 76.28 },
   },
   risks: [],
 };
@@ -39,12 +40,28 @@ test('the console line carries every number needed to decide', () => {
   assert.match(text, /https:\/\/www\.ebay\.com\/itm\/123/);
 });
 
-test('risks and lot size are surfaced', () => {
-  const risky = { ...deal, risks: ['seller has only 2 feedback'], score: { ...deal.score, lotSize: 4 } };
+test('risks, lot size and stock are surfaced', () => {
+  const risky = {
+    ...deal,
+    risks: ['seller has only 2 feedback'],
+    score: { ...deal.score, lotSize: 4, totalUnits: 4, investment: 1000 },
+  };
   const text = formatDeal(risky);
   assert.match(text, /lot of 4/);
   assert.match(text, /\/unit/);
+  assert.match(text, /Total spend \$1000\.00 for 4 units/);
   assert.match(text, /!! seller has only 2 feedback/);
+});
+
+test('a multi-stock buy shows how the spend reaches the minimum', () => {
+  const stocked = {
+    ...deal,
+    score: { ...deal.score, buyPrice: 60, quantityAvailable: 5, totalUnits: 5, investment: 300 },
+  };
+  const text = formatDeal(stocked);
+  assert.match(text, /5 in stock/);
+  assert.match(text, /Buy \$60\.00\/unit/);
+  assert.match(text, /Total spend \$300\.00 for 5 units/);
 });
 
 test('sends a Discord embed when the webhook looks like Discord', async () => {

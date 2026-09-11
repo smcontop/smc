@@ -3,7 +3,7 @@
 
 import { CATEGORIES } from './config.js';
 import { toListing } from './ebay.js';
-import { createFilter, assessRisk } from './filters.js';
+import { createFilter, assessRisk, screenSeller } from './filters.js';
 import { identify } from './normalize.js';
 import { compKey, effectivePrice, evaluate } from './valuation.js';
 
@@ -14,6 +14,18 @@ export class FatalScanError extends Error {
     super(message);
     this.name = 'FatalScanError';
   }
+}
+
+// Everything except the total-spend floor already passed, and the single-unit
+// spend falls short: the seller's stock is the only thing that can rescue it.
+function worthCheckingStock(score, config, lookupsSoFar) {
+  const { checkStockUnderInvestment = true, minInvestment = 300, maxStockLookupsPerScan = 60 } = config.valuation;
+  if (!checkStockUnderInvestment || lookupsSoFar >= maxStockLookupsPerScan) return false;
+  if (score.skipped || score.isDeal) return false;
+  if (score.investment >= minInvestment) return false; // already failed on something else
+
+  const { minDiscount = 0.3, minRoi = 0.25, minUnitProfit = 15 } = config.valuation;
+  return score.discount >= minDiscount && score.roi >= minRoi && score.unitProfit >= minUnitProfit;
 }
 
 function buildApiFilters({ priceMin, priceMax, itemLocationCountry }, { auctionsOnly = false, fixedOnly = false } = {}) {
@@ -48,7 +60,7 @@ export async function scan({ client, config, store, logger = console, onlyTypes 
 
   const seenIds = new Set(); // every item id returned this scan, deal or not
   const candidates = new Map(); // itemId -> { listing, identity, key }
-  const stats = { fetched: 0, screened: 0, identified: 0, queries: 0, errors: 0 };
+  const stats = { fetched: 0, screened: 0, identified: 0, queries: 0, errors: 0, rejectedSeller: 0 };
 
   for (const type of types) {
     for (const query of config.search.targets[type] ?? []) {
@@ -79,10 +91,10 @@ export async function scan({ client, config, store, logger = console, onlyTypes 
         seenIds.add(listing.id);
         stats.fetched += 1;
 
-        if (!screen(listing).ok) continue;
+        const identity = identify(listing.title, { expectedType: type });
+        if (!screen(listing, identity).ok) continue;
         stats.screened += 1;
 
-        const identity = identify(listing.title, { expectedType: type });
         if (!identity) continue;
         stats.identified += 1;
 
@@ -103,6 +115,7 @@ export async function scan({ client, config, store, logger = console, onlyTypes 
 
   const deals = [];
   const evaluated = [];
+  let stockLookups = 0;
 
   for (const candidate of candidates.values()) {
     const { listing, identity, key } = candidate;
@@ -111,10 +124,33 @@ export async function scan({ client, config, store, logger = console, onlyTypes 
     // median it is being judged against.
     const comps = store.history(key, { excludeItemId: listing.id });
 
-    const score = evaluate({ listing, identity, comps, config: config.valuation });
+    let score = evaluate({ listing, identity, comps, config: config.valuation });
+
+    // A cheap item can still qualify if the seller has enough of them: only
+    // then is the extra availability call worth spending.
+    if (worthCheckingStock(score, config, stockLookups)) {
+      try {
+        const quantity = await client.getAvailableQuantity(listing.id);
+        stockLookups += 1;
+        if (quantity > 1) {
+          score = evaluate({ listing, identity, comps, config: config.valuation, quantityAvailable: quantity });
+        }
+      } catch (err) {
+        stats.errors += 1;
+        logger.error(`Stock lookup failed for ${listing.id}: ${err.message}`);
+      }
+    }
+
     evaluated.push({ listing, identity, score });
     if (score.skipped || !score.isDeal) continue;
     if (listing.isAuction && !config.search.includeAuctions) continue;
+
+    // Hard seller rules: below the feedback floor, or no feedback at all.
+    const sellerProblem = screenSeller(listing, config.risk);
+    if (sellerProblem) {
+      stats.rejectedSeller += 1;
+      continue;
+    }
 
     const risks = assessRisk(listing, config.risk, score.discount);
     if (risks.length && config.risk.skipRisky) {

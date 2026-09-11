@@ -4,7 +4,7 @@
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-const EMPTY = { version: 1, prices: {}, seen: {} };
+const EMPTY = { version: 1, prices: {}, seen: {}, deals: [], dismissed: {}, lastScanAt: null };
 
 export class Store {
   constructor(path, { retentionDays = 30, maxSamplesPerKey = 400, seenRetentionDays = 14 } = {}) {
@@ -80,6 +80,34 @@ export class Store {
     for (const [id, ts] of Object.entries(this.data.seen)) {
       if (ts < seenCutoff) delete this.data.seen[id];
     }
+  }
+
+  // The deal list the viewer app reads. Kept in the same file as the price
+  // history so a scan and its results can never drift apart.
+  saveDeals(deals, { at = Date.now() } = {}) {
+    this.data.deals = deals.map((deal) => ({
+      id: deal.listing.id,
+      foundAt: this.data.deals?.find((d) => d.id === deal.listing.id)?.foundAt ?? at,
+      listing: deal.listing,
+      identity: deal.identity,
+      score: deal.score,
+      risks: deal.risks ?? [],
+    }));
+    this.data.lastScanAt = at;
+  }
+
+  deals() {
+    return this.data.deals ?? [];
+  }
+
+  dismissed() {
+    return this.data.dismissed ?? {};
+  }
+
+  setDismissed(itemId, value, at = Date.now()) {
+    this.data.dismissed ??= {};
+    if (value) this.data.dismissed[itemId] = at;
+    else delete this.data.dismissed[itemId];
   }
 
   stats() {

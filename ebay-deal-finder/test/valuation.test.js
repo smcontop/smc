@@ -12,17 +12,19 @@ const config = {
   supplies: 1.5,
   defaultShippingCost: 12,
   shippingCostByType: { gpu: 18, cpu: 6, ram: 6 },
-  minDiscount: 0.25,
+  minDiscount: 0.3,
+  minInvestment: 300,
   minProfit: 40,
+  minUnitProfit: 15,
   minRoi: 0.25,
 };
 
-const gpuIdentity = { type: 'gpu', model: 'rtx 3080|10gb', key: 'gpu:rtx 3080|10gb', lotSize: 1 };
-const comps = [400, 410, 415, 420, 425, 430, 435, 440, 450, 460];
+const gpuIdentity = { type: 'gpu', model: 'rtx 4080|16gb', key: 'gpu:rtx 4080|16gb', lotSize: 1 };
+const comps = [700, 710, 715, 720, 725, 730, 735, 740, 750, 760];
 
 function listing(overrides = {}) {
   return {
-    id: 'v1|1|0', title: 'RTX 3080 10GB', price: 250, shipping: 0, currency: 'USD',
+    id: 'v1|1|0', title: 'RTX 4080 16GB', price: 450, shipping: 0, currency: 'USD',
     condition: 'Used', conditionId: '3000', isAuction: false, seller: {}, ...overrides,
   };
 }
@@ -64,44 +66,97 @@ test('condition buckets follow eBay condition ids', () => {
 });
 
 test('flags a genuinely underpriced listing as a deal', () => {
-  const score = evaluate({ listing: listing({ price: 250 }), identity: gpuIdentity, comps, config });
+  const score = evaluate({ listing: listing({ price: 450 }), identity: gpuIdentity, comps, config });
   assert.equal(score.isDeal, true);
-  assert.equal(score.market, 427.5);
-  assert.equal(score.buyPrice, 250);
-  // resale p45 = 425.5, costs = 56.38 + 18 + 1.5, profit = 425.5 - 76.26 - 250
-  assert.ok(score.profit > 90 && score.profit < 110, `unexpected profit ${score.profit}`);
-  assert.ok(score.roi > 0.35);
+  assert.equal(score.market, 727.5);
+  assert.equal(score.buyPrice, 450);
+  assert.equal(score.investment, 450);
+  assert.ok(score.discount > 0.35, `discount ${score.discount}`);
+  assert.ok(score.profit > 140 && score.profit < 180, `unexpected profit ${score.profit}`);
+  assert.ok(score.roi > 0.3);
 });
 
 test('does not flag a listing priced at market', () => {
-  const score = evaluate({ listing: listing({ price: 425 }), identity: gpuIdentity, comps, config });
+  const score = evaluate({ listing: listing({ price: 725 }), identity: gpuIdentity, comps, config });
   assert.equal(score.isDeal, false);
   assert.ok(score.profit < 0, 'buying at market and reselling loses money on fees');
 });
 
-test('a discount that does not cover fees is not a deal', () => {
-  // 20% under market looks cheap but fees and shipping eat the margin.
-  const score = evaluate({ listing: listing({ price: 342 }), identity: gpuIdentity, comps, config });
+test('a discount below the 30% rule is not a deal however profitable', () => {
+  // 20% under market: real money, but under the threshold.
+  const score = evaluate({ listing: listing({ price: 582 }), identity: gpuIdentity, comps, config });
+  assert.ok(score.discount < 0.3 && score.discount > 0.15, `discount ${score.discount}`);
+  assert.ok(score.profit > 0, 'still profitable on paper');
+  assert.equal(score.isDeal, false, 'but the 30% rule rejects it');
+});
+
+test('a single item under the $300 floor is rejected', () => {
+  const cheapComps = [140, 145, 148, 150, 152, 155, 158, 160, 162, 165];
+  const ramIdentity = { type: 'ram', model: 'ddr5|32gb|6000', key: 'ram:ddr5|32gb|6000', lotSize: 1 };
+  const score = evaluate({
+    listing: listing({ price: 60, title: 'DDR5 32GB' }), identity: ramIdentity, comps: cheapComps, config,
+  });
+
+  assert.ok(score.discount > 0.5, 'genuinely cheap');
+  assert.equal(score.investment, 60);
+  assert.equal(score.isDeal, false, '$60 alone is under the $300 minimum');
+});
+
+test('a cheap item qualifies once the seller has enough stock to reach $300', () => {
+  const cheapComps = [140, 145, 148, 150, 152, 155, 158, 160, 162, 165];
+  const ramIdentity = { type: 'ram', model: 'ddr5|32gb|6000', key: 'ram:ddr5|32gb|6000', lotSize: 1 };
+  const args = { listing: listing({ price: 60, title: 'DDR5 32GB' }), identity: ramIdentity, comps: cheapComps, config };
+
+  assert.equal(evaluate({ ...args, quantityAvailable: 4 }).isDeal, false, '4 x $60 = $240, still short');
+
+  const five = evaluate({ ...args, quantityAvailable: 5 });
+  assert.equal(five.investment, 300);
+  assert.equal(five.totalUnits, 5);
+  assert.equal(five.isDeal, true, '5 x $60 = $300 clears the floor');
+  assert.ok(five.profit > 4 * five.unitProfit, 'profit counts every unit');
+});
+
+test('a lot listing reaches the floor through its lot size', () => {
+  const cheapComps = [140, 145, 148, 150, 152, 155, 158, 160, 162, 165];
+  const lotIdentity = { type: 'ram', model: 'ddr5|32gb|6000', key: 'ram:ddr5|32gb|6000', lotSize: 6 };
+  const score = evaluate({
+    listing: listing({ price: 360, title: 'Lot of 6 DDR5 32GB' }), identity: lotIdentity, comps: cheapComps, config,
+  });
+  assert.equal(score.buyPrice, 60, 'per unit');
+  assert.equal(score.investment, 360);
+  assert.equal(score.isDeal, true);
+});
+
+test('per-unit profit still has to be worth the handling', () => {
+  const thinComps = [70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
+  const identity = { type: 'ram', model: 'ddr4|16gb|3200', key: 'ram:ddr4|16gb|3200', lotSize: 1 };
+  // 30% under a $75 part is only ~$22, and fees leave under $15 a unit.
+  const score = evaluate({
+    listing: listing({ price: 50, title: 'DDR4 16GB' }), identity, comps: thinComps, config, quantityAvailable: 10,
+  });
+  assert.ok(score.investment >= 300, 'clears the spend floor on volume');
+  assert.ok(score.unitProfit < 15, `unit profit ${score.unitProfit}`);
   assert.equal(score.isDeal, false);
 });
 
 test('shipping cost is counted in the buy price', () => {
-  const cheap = evaluate({ listing: listing({ price: 250, shipping: 0 }), identity: gpuIdentity, comps, config });
-  const shipped = evaluate({ listing: listing({ price: 250, shipping: 40 }), identity: gpuIdentity, comps, config });
+  const cheap = evaluate({ listing: listing({ price: 450, shipping: 0 }), identity: gpuIdentity, comps, config });
+  const shipped = evaluate({ listing: listing({ price: 450, shipping: 40 }), identity: gpuIdentity, comps, config });
   assert.equal(shipped.buyPrice - cheap.buyPrice, 40);
   assert.ok(shipped.profit < cheap.profit);
 });
 
 test('refuses to judge a listing without enough comps', () => {
-  const score = evaluate({ listing: listing(), identity: gpuIdentity, comps: [400, 410, 420], config });
+  const score = evaluate({ listing: listing(), identity: gpuIdentity, comps: [700, 710, 720], config });
   assert.equal(score.skipped, true);
   assert.equal(score.reason, 'insufficient-comps');
 });
 
 test('lot listings are scored per unit but profit is for the whole lot', () => {
   const lot = { ...gpuIdentity, lotSize: 4 };
-  const score = evaluate({ listing: listing({ price: 1000 }), identity: lot, comps, config });
-  assert.equal(score.buyPrice, 250);
+  const score = evaluate({ listing: listing({ price: 1800 }), identity: lot, comps, config });
+  assert.equal(score.buyPrice, 450, 'per unit');
+  assert.equal(score.totalUnits, 4);
+  assert.equal(score.investment, 1800);
   assert.ok(Math.abs(score.profit - score.unitProfit * 4) < 0.05, `${score.profit} vs ${score.unitProfit} x4`);
-  assert.ok(score.profit > 380 && score.profit < 410, `unexpected lot profit ${score.profit}`);
 });

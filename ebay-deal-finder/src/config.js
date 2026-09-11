@@ -41,6 +41,7 @@ export const DEFAULTS = {
 
   filters: {
     allowUntested: false,
+    desktopRamOnly: true, // laptop SODIMM memory is excluded
     blockPatterns: null, // null = built-in list
     accessoryPatterns: null,
   },
@@ -54,14 +55,18 @@ export const DEFAULTS = {
     defaultShippingCost: 12,
     shippingCostByType: { cpu: 6, gpu: 18, ram: 6 },
     assumedShipping: 0, // added to listings with unknown/calculated shipping
-    minDiscount: 0.25,
-    minProfit: 40,
+    minDiscount: 0.3, // must be at least 30% under market
+    minInvestment: 300, // total spend, so a $60 item needs 5 in stock to qualify
+    minProfit: 40, // across everything you would buy
+    minUnitProfit: 15, // each unit has to be worth handling
     minRoi: 0.25,
+    checkStockUnderInvestment: true, // one extra API call to count cheap items' stock
+    maxStockLookupsPerScan: 60,
   },
 
   risk: {
-    minFeedbackScore: 20,
-    minFeedbackPercentage: 95,
+    minFeedbackPercentage: 90, // hard rule
+    requireFeedback: true, // no reviews at all means no deal
     maxDiscount: 0.8, // beyond this it is almost always a scam listing
     skipRisky: true,
   },

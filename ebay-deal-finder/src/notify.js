@@ -6,17 +6,31 @@ export function formatMoney(value, currency = 'USD') {
   return `${symbol}${value.toFixed(2)}`;
 }
 
+// "3 units" reads better than the raw arithmetic when a lot or a multi-stock
+// listing is what gets the buy over the minimum spend.
+export function describeUnits(score) {
+  const parts = [];
+  if (score.lotSize > 1) parts.push(`lot of ${score.lotSize}`);
+  if (score.quantityAvailable > 1) parts.push(`${score.quantityAvailable} in stock`);
+  return parts.join(', ');
+}
+
 export function formatDeal(deal) {
   const { listing, identity, score, risks } = deal;
   const pct = (n) => `${Math.round(n * 100)}%`;
+  const units = describeUnits(score);
+  const perUnit = score.totalUnits > 1 ? '/unit' : '';
+
   const lines = [
-    `${identity.type.toUpperCase()}  ${identity.model}${score.lotSize > 1 ? ` (lot of ${score.lotSize})` : ''}`,
+    `${identity.type.toUpperCase()}  ${identity.model}${units ? `  (${units})` : ''}`,
     `  ${listing.title}`,
-    `  Buy ${formatMoney(score.buyPrice, listing.currency)}${score.lotSize > 1 ? '/unit' : ''}` +
+    `  Buy ${formatMoney(score.buyPrice, listing.currency)}${perUnit}` +
       `  |  Market ${formatMoney(score.market, listing.currency)}` +
       `  |  ${pct(score.discount)} under  (n=${score.sampleSize})`,
     `  Est. resale ${formatMoney(score.resale, listing.currency)} - ${formatMoney(score.costs.total, listing.currency)} costs` +
       `  =>  profit ${formatMoney(score.profit, listing.currency)}  (ROI ${pct(score.roi)})`,
+    `  Total spend ${formatMoney(score.investment, listing.currency)}` +
+      (score.totalUnits > 1 ? ` for ${score.totalUnits} units` : ''),
     `  ${listing.condition}${listing.isAuction ? ` | auction, ${listing.bidCount ?? 0} bids` : ' | buy it now'}` +
       `  | seller ${listing.seller.username ?? '?'} (${listing.seller.feedbackScore ?? '?'} @ ${listing.seller.feedbackPercentage ?? '?'}%)`,
     `  ${listing.url}`,
@@ -34,12 +48,12 @@ function discordPayload(deals) {
       color: risks?.length ? 0xe6a817 : 0x2ecc71,
       thumbnail: listing.image ? { url: listing.image } : undefined,
       fields: [
-        { name: 'Buy', value: formatMoney(score.buyPrice, listing.currency), inline: true },
+        { name: 'Buy', value: `${formatMoney(score.buyPrice, listing.currency)}${score.totalUnits > 1 ? '/unit' : ''}`, inline: true },
         { name: 'Market', value: formatMoney(score.market, listing.currency), inline: true },
         { name: 'Est. profit', value: `${formatMoney(score.profit, listing.currency)} (${Math.round(score.roi * 100)}% ROI)`, inline: true },
         { name: 'Model', value: `${identity.type.toUpperCase()} ${identity.model}`, inline: true },
-        { name: 'Condition', value: listing.condition, inline: true },
-        { name: 'Comps', value: `n=${score.sampleSize}`, inline: true },
+        { name: 'Total spend', value: `${formatMoney(score.investment, listing.currency)}${describeUnits(score) ? ` (${describeUnits(score)})` : ''}`, inline: true },
+        { name: 'Condition', value: `${listing.condition} · n=${score.sampleSize}`, inline: true },
         ...(risks?.length ? [{ name: 'Watch out', value: risks.join('; ').slice(0, 1000) }] : []),
       ],
     })),

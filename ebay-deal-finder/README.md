@@ -1,18 +1,36 @@
 # eBay PC Parts Deal Finder
 
 Scans eBay for **CPU, GPU and RAM** listings that are priced well below what the
-same part is selling for, and notifies you when one is worth buying to resell.
+same part is selling for, notifies you when one is worth buying to resell, and
+shows the survivors in a viewer that works on a PC and a phone.
 
 It is not a keyword alert. Every listing is matched to a specific model
-(`RTX 3080 10GB`, `i7-12700K`, `DDR5 32GB 6000`), compared against that model's
+(`RTX 4080 16GB`, `i7-12700K`, `DDR5 32GB 6000`), compared against that model's
 own market, and then run through the actual resale maths — eBay fees, shipping
 both ways, and packing supplies — before it will alert you. Zero dependencies.
+
+## The buying rules
+
+Every alert has cleared all five. They are the defaults in `src/config.js`:
+
+| Rule | Setting |
+| --- | --- |
+| **$300 minimum spend** — one item at $300+, or a cheaper one with enough stock to total $300 (a $60 kit with 5 available) | `valuation.minInvestment` |
+| **30% or more under market** | `valuation.minDiscount` |
+| **GPU, CPU or RAM only** | `search.types` |
+| **Desktop RAM only** — SODIMM and laptop memory excluded | `filters.desktopRamOnly` |
+| **Seller at 90%+ positive, and no-feedback sellers excluded** | `risk.minFeedbackPercentage`, `risk.requireFeedback` |
+
+Two more floors stop technically-qualifying but pointless buys: `minUnitProfit`
+($15, so each unit is worth handling) and `minRoi` (25%).
 
 ## What it does
 
 1. **Searches** the CPU, GPU and RAM categories for a list of models you care about.
-2. **Screens out** the junk: for-parts, broken, empty-box, photo-only, and
-   accessory listings ("bracket *for* RTX 3080") never become deals or comps.
+2. **Screens out** the junk: for-parts, broken, empty-box and photo-only
+   listings; accessories ("bracket *for* RTX 4080"); GPU water blocks and
+   "GPU chip", bare die, BGA, reballed, PCB-only, donor-board and scrap
+   listings; and laptop SODIMM memory. None of them become deals *or* comps.
 3. **Identifies the exact part** from the title, so comparisons are like-for-like.
    VRAM size, chip suffix, DDR generation, kit capacity, ECC and SODIMM all
    change the key, because they all change the price.
@@ -26,13 +44,17 @@ both ways, and packing supplies — before it will alert you. Zero dependencies.
    buy price   = item price + shipping     (per unit for lots)
    resale      = 45th percentile of comps  (you undercut a bit to actually sell)
    costs       = 13.25% eBay fee + $0.40 + your shipping + supplies
-   profit      = resale - costs - buy price
+   profit      = (resale - costs - buy price) x every unit you would buy
+   spend       = buy price x every unit you would buy
    ```
 
-   It alerts only when the discount, the profit **and** the ROI all clear your
-   thresholds.
+   When a listing is under $300 but clears everything else, the scanner spends
+   one extra API call to ask eBay how many the seller has — that is how a $60
+   item with 5 in stock qualifies. Listings that fail on price anyway never
+   cost that call.
 6. **Notifies** via console, Discord/Slack/generic webhook, or ntfy.sh for phone
-   pushes — once per listing, never the same one twice.
+   pushes — once per listing, never the same one twice — and keeps the current
+   deal list for the viewer app.
 
 ## Setup
 
@@ -54,12 +76,13 @@ No `npm install` is needed — the tool has no dependencies and requires Node 18
 ```bash
 cd ebay-deal-finder
 
+node src/index.js serve                 # viewer app + scanning on a schedule
 node src/index.js scan                  # one scan, print deals
 node src/index.js scan --verbose        # with scan statistics
 node src/index.js watch --interval 20   # keep scanning every 20 minutes
 node src/index.js comps                 # what the tool thinks parts are worth
 node src/index.js scan --json           # machine-readable output
-npm test                                # 45 tests, no network needed
+npm test                                # 77 tests, no network needed
 ```
 
 Useful flags:
@@ -72,19 +95,48 @@ Useful flags:
 | `--min-discount 0.35` | Only alert at 35%+ below market |
 | `--min-samples 12` | Demand more comps before trusting a price |
 | `--include-auctions` | Also score auction listings |
+| `--port 8787` | Port for the viewer app |
+| `--no-scan` | With `serve`: show saved deals without scanning |
 | `--dry-run` | Print deals, send no notifications, mark nothing as seen |
 | `--renotify` | Re-alert on listings you were already told about |
 
 ### Sample output
 
 ```
-GPU  rtx 3080|10gb
-  NVIDIA GeForce RTX 3080 10GB Founders Edition
-  Buy $250.00  |  Market $427.50  |  42% under  (n=12)
-  Est. resale $425.50 - $76.28 costs  =>  profit $99.22  (ROI 40%)
-  Used | buy it now | seller pcpartsguy (1420 @ 99.6%)
+RAM  ddr5|32gb|6000  (5 in stock)
+  Corsair Vengeance 32GB (2x16GB) DDR5 6000MHz CL30 Desktop Memory
+  Buy $62.00/unit  |  Market $160.00  |  61% under  (n=9)
+  Est. resale $158.00 - $89.75 costs  =>  profit $341.03  (ROI 110%)
+  Total spend $310.00 for 5 units
+  New | buy it now | seller pcpartsguy (1420 @ 99.6%)
   https://www.ebay.com/itm/...
 ```
+
+## The viewer app
+
+```bash
+node src/index.js serve
+```
+
+```
+Deal viewer running:
+  On this PC   http://localhost:8787
+  On your phone http://192.168.1.24:8787
+```
+
+Open the first link on Windows; type the second into your iPhone on the same
+Wi-Fi. It is one page: your five rules across the top, then a card per
+qualifying listing showing estimated profit, what you pay against what it is
+worth, how the spend reaches $300, the seller's numbers, and a button straight
+to the listing. Filter by GPU/CPU/RAM, sort by profit, ROI, discount, newest or
+lowest spend, and hide the ones you have looked at (hidden state is saved, so
+your phone and PC agree).
+
+`serve` also keeps scanning on the usual interval, so the page stays current —
+add `--no-scan` to browse the last results without touching the API.
+
+To look at deals away from your PC, save `http://localhost:8787/api/export` as
+`deals.json` and load it into the hosted viewer with **Load deals.json**.
 
 ## Getting notified on your phone
 
@@ -110,17 +162,21 @@ useful knobs:
 
 - **`search.targets`** — the model queries per category. Add the parts you
   actually flip; each query is what gathers the comps for those models.
-- **`valuation.minProfit` / `minRoi` / `minDiscount`** — how good a deal has to
-  be. Raise these if you get too many marginal alerts. Note the $40 default
-  profit floor filters out most RAM, where a genuine 50%-off kit may only clear
-  $30; drop `--min-profit` to around 20 if you want those.
+- **`valuation.minInvestment` / `minDiscount` / `minProfit` / `minRoi`** — the
+  buying rules above. Raise them if you get too many marginal alerts.
 - **`valuation.minSamples`** — how many comparable listings are required before
   the tool will state an opinion. Lower it and you will get noise.
 - **`valuation.feePercent` / `shippingCostByType`** — match your real costs.
   If your fee tier or shipping differs, the profit numbers are only as good as
   these.
+- **`risk.minFeedbackPercentage` / `requireFeedback`** — the seller gate. These
+  apply to alerts only: a low-feedback seller's asking price is still valid
+  market data, so their listings still count as comps.
 - **`risk.skipRisky`** — set to `false` to see flagged deals with warnings
   attached rather than having them dropped.
+- **`filters.blockPatterns`** — add your own junk words. Anything you list
+  replaces the built-in block list, so copy `DEFAULT_BLOCK_PATTERNS` from
+  `src/filters.js` before editing.
 
 ## Important limitations — read before spending money
 
@@ -134,6 +190,8 @@ useful knobs:
   photos, or know a GPU was mined on for two years.
 - **Very low prices are usually scams, not deals.** Anything more than 80% under
   market is dropped by default for that reason.
+- **Stock counts are eBay's estimate.** A seller showing 5 available may cancel
+  after you buy 5; the $300 total is a plan, not a guarantee.
 - **Auctions** are off by default: the current bid is not the final price.
 - A model the tool has never seen enough of will produce no alerts at all until
   enough comps accumulate. That is deliberate. Run `comps` to see the coverage.
@@ -150,3 +208,5 @@ useful knobs:
 | `src/filters.js` | Junk, accessory and seller-risk screening |
 | `src/store.js` | Rolling price history and already-notified listings |
 | `src/notify.js` | Console, webhook and ntfy delivery |
+| `src/server.js` | Local HTTP server behind the viewer |
+| `web/app.html` | The viewer app (also published as a hosted page) |
