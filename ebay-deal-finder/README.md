@@ -58,18 +58,41 @@ Two more floors stop technically-qualifying but pointless buys: `minUnitProfit`
 
 ## Setup
 
-You need free eBay developer API keys:
+You need free eBay developer API keys. Node 18+ is the only other requirement —
+there is nothing to `npm install`.
 
-1. Sign up at [developer.ebay.com](https://developer.ebay.com/), create an app,
-   and copy the **production** App ID (Client ID) and Cert ID (Client Secret).
-2. Export them:
+1. Sign up at [developer.ebay.com](https://developer.ebay.com/) and create an
+   application keyset. Take the **Production** one; Sandbox has no real
+   listings, so it produces no real prices.
 
-   ```bash
-   export EBAY_CLIENT_ID=your-app-id
-   export EBAY_CLIENT_SECRET=your-cert-id
+2. **Enable the keyset.** A new production keyset is disabled until you
+   subscribe to (or opt out of) eBay marketplace account deletion notifications.
+   Opting out is the right choice here, because this tool stores no eBay user
+   data: **Application Keys → Notifications** under the Production keys →
+   toggle **"Not persisting eBay data"**. Skip this and every call returns 401.
+
+3. Copy the **App ID** (your Client ID) and **Cert ID** (your Client Secret) and
+   put them in your terminal.
+
+   Windows PowerShell, for this session:
+
+   ```powershell
+   $env:EBAY_CLIENT_ID="your-app-id"
+   $env:EBAY_CLIENT_SECRET="your-cert-id"
    ```
 
-No `npm install` is needed — the tool has no dependencies and requires Node 18+.
+   To keep them for good on Windows, `setx EBAY_CLIENT_ID "your-app-id"` (then
+   open a new terminal). On macOS or Linux use `export` and add it to your
+   shell profile.
+
+4. Confirm it all works before scanning:
+
+   ```bash
+   node src/index.js check
+   ```
+
+   It tests the keys, one live search, and a stock lookup, and names the fix for
+   whatever fails.
 
 ## Usage
 
@@ -80,6 +103,7 @@ node src/index.js serve                 # viewer app + scanning on a schedule
 node src/index.js scan                  # one scan, print deals
 node src/index.js scan --verbose        # with scan statistics
 node src/index.js watch --interval 20   # keep scanning every 20 minutes
+node src/index.js check                 # test your keys and the connection
 node src/index.js comps                 # what the tool thinks parts are worth
 node src/index.js scan --json           # machine-readable output
 npm test                                # 77 tests, no network needed
@@ -134,6 +158,10 @@ your phone and PC agree).
 
 `serve` also keeps scanning on the usual interval, so the page stays current —
 add `--no-scan` to browse the last results without touching the API.
+
+The first time you open it from your phone, Windows will ask whether to allow
+Node through the firewall: allow it on **private networks**, or the phone URL
+will not load.
 
 To look at deals away from your PC, save `http://localhost:8787/api/export` as
 `deals.json` and load it into the hosted viewer with **Load deals.json**.

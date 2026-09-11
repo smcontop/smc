@@ -3,7 +3,9 @@
 
 import { parseArgs } from 'node:util';
 import { credentialsFromEnv, loadConfig } from './config.js';
+import { CATEGORIES } from './config.js';
 import { EbayClient } from './ebay.js';
+import { identify } from './normalize.js';
 import { notify } from './notify.js';
 import { FatalScanError, scan } from './scanner.js';
 import { createDealServer, lanAddresses } from './server.js';
@@ -17,6 +19,7 @@ Usage:
   node src/index.js scan [options]     Run one scan
   node src/index.js watch [options]    Scan repeatedly on an interval
   node src/index.js serve [options]    Open the deal viewer (and keep scanning)
+  node src/index.js check              Test your eBay keys and the connection
   node src/index.js comps [options]    Show the price data collected so far
 
 Options:
@@ -135,6 +138,71 @@ function showComps(store, values) {
   }
 }
 
+// Turns the usual first-run failures into the specific thing to go and fix.
+async function runCheck(config) {
+  const credentials = credentialsFromEnv();
+  const ok = (msg) => console.log(`  OK    ${msg}`);
+  const bad = (msg) => console.log(`  FAIL  ${msg}`);
+
+  console.log('\nChecking your eBay connection\n');
+
+  if (!credentials.clientId || !credentials.clientSecret) {
+    bad('EBAY_CLIENT_ID / EBAY_CLIENT_SECRET are not set in this terminal.');
+    console.log('\n  Set them and run this again. On Windows PowerShell:');
+    console.log('    $env:EBAY_CLIENT_ID="your-app-id"');
+    console.log('    $env:EBAY_CLIENT_SECRET="your-cert-id"\n');
+    return false;
+  }
+  ok(`credentials found (App ID ${credentials.clientId.slice(0, 12)}…)`);
+
+  if (config.environment !== 'production') {
+    console.log(`  NOTE  environment is "${config.environment}" — sandbox has no real listings, so no real prices.`);
+  }
+
+  const client = new EbayClient({
+    ...credentials,
+    environment: config.environment,
+    marketplaceId: config.marketplaceId,
+  });
+
+  try {
+    await client.getToken();
+    ok('eBay accepted the keys and issued a token');
+  } catch (err) {
+    bad(`eBay rejected the keys (${err.status ?? 'no response'})`);
+    if (err.status === 400 || err.status === 401) {
+      console.log('\n  Almost always one of these:');
+      console.log('   1. The keyset is still disabled. A new production keyset does nothing until you');
+      console.log('      subscribe to or opt out of eBay marketplace account deletion notifications:');
+      console.log('      developer.ebay.com -> Application Keys -> Notifications (under Production)');
+      console.log('      -> toggle "Not persisting eBay data".');
+      console.log('   2. Sandbox keys in a production run, or the App ID and Cert ID swapped.');
+      console.log('   3. A stray space or quote in the copied value.\n');
+    }
+    return false;
+  }
+
+  try {
+    const items = await client.search({ query: 'rtx 4080', categoryIds: CATEGORIES.gpu, maxItems: 20 });
+    ok(`search works — ${items.length} live listings returned for "rtx 4080"`);
+
+    const identified = items.map((raw) => identify(raw.title, { expectedType: 'gpu' })).filter(Boolean);
+    ok(`model matching works — recognised ${identified.length} of ${items.length} titles`);
+
+    if (items[0]?.itemId) {
+      const qty = await client.getAvailableQuantity(items[0].itemId);
+      ok(`stock lookup works — first listing reports ${qty} available`);
+    }
+  } catch (err) {
+    bad(`a live call failed (${err.status ?? 'no response'}): ${err.message}`);
+    if (err.status === 429) console.log('\n  Daily API quota reached. It resets at midnight UTC.\n');
+    return false;
+  }
+
+  console.log('\nEverything works. Next: node src/index.js serve\n');
+  return true;
+}
+
 function createClient(config, { required = true } = {}) {
   const credentials = credentialsFromEnv();
   if (!credentials.clientId || !credentials.clientSecret) {
@@ -196,6 +264,12 @@ async function main() {
 
   const config = await loadConfig(values.config, overridesFrom(values));
   const store = await new Store(config.store.path, config.store).load();
+
+  if (command === 'check') {
+    const passed = await runCheck(config);
+    if (!passed) process.exitCode = 1;
+    return;
+  }
 
   if (command === 'comps') {
     showComps(store, values);
