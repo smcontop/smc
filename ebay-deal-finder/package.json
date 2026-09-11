@@ -1,0 +1,19 @@
+{
+  "name": "ebay-deal-finder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Finds underpriced CPU, GPU and RAM listings on eBay and notifies you when one is worth flipping.",
+  "type": "module",
+  "bin": {
+    "ebay-deal-finder": "src/index.js"
+  },
+  "scripts": {
+    "scan": "node src/index.js scan",
+    "watch": "node src/index.js watch",
+    "comps": "node src/index.js comps",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

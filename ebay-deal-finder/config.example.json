@@ -1,0 +1,51 @@
+{
+  "marketplaceId": "EBAY_US",
+
+  "search": {
+    "types": ["cpu", "gpu", "ram"],
+    "priceMin": 40,
+    "priceMax": 3000,
+    "itemLocationCountry": "US",
+    "includeAuctions": false,
+    "maxItemsPerQuery": 200,
+    "targets": {
+      "gpu": ["rtx 4090", "rtx 4070", "rtx 3080", "rtx 3070", "rx 7900", "rx 6800"],
+      "cpu": ["ryzen 7", "ryzen 9", "core i7", "core i9"],
+      "ram": ["ddr5 32gb", "ddr4 32gb"]
+    }
+  },
+
+  "valuation": {
+    "minSamples": 8,
+    "minDiscount": 0.3,
+    "minInvestment": 300,
+    "minProfit": 40,
+    "minUnitProfit": 15,
+    "minRoi": 0.25,
+    "resalePercentile": 45,
+    "feePercent": 13.25,
+    "shippingCostByType": { "cpu": 6, "gpu": 18, "ram": 6 }
+  },
+
+  "filters": {
+    "desktopRamOnly": true,
+    "allowUntested": false
+  },
+
+  "risk": {
+    "minFeedbackPercentage": 90,
+    "requireFeedback": true,
+    "maxDiscount": 0.8,
+    "skipRisky": true
+  },
+
+  "notifications": {
+    "console": true,
+    "webhookUrl": null,
+    "ntfyTopic": null,
+    "maxPerScan": 25
+  },
+
+  "watch": { "intervalMinutes": 30 },
+  "server": { "port": 8787 }
+}
