@@ -1,0 +1,35 @@
+# Scheduled scan. Set EBAY_CLIENT_ID / EBAY_CLIENT_SECRET (and optionally
+# DEAL_WEBHOOK_URL or DEAL_NTFY_TOPIC) as repository secrets to use this.
+name: eBay deal scan
+
+on:
+  schedule:
+    - cron: '0 */2 * * *' # every 2 hours
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Price history is what makes the comps good, so carry it between runs.
+      - name: Restore price history
+        uses: actions/cache@v4
+        with:
+          path: ebay-deal-finder/data
+          key: ebay-deal-state-${{ github.run_id }}
+          restore-keys: ebay-deal-state-
+
+      - name: Scan
+        working-directory: ebay-deal-finder
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          DEAL_WEBHOOK_URL: ${{ secrets.DEAL_WEBHOOK_URL }}
+          DEAL_NTFY_TOPIC: ${{ secrets.DEAL_NTFY_TOPIC }}
+        run: node src/index.js scan --verbose
