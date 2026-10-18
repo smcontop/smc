@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="tile_w">150dp</dimen>
+    <dimen name="tile_h">84dp</dimen>
+    <dimen name="tile_gap">18dp</dimen>
+    <dimen name="name_top">92dp</dimen>
+    <dimen name="name_h">20dp</dimen>
+    <dimen name="dock_min_h">112dp</dimen>
+    <dimen name="edge_h">56dp</dimen>
+    <dimen name="edge_v">26dp</dimen>
+</resources>

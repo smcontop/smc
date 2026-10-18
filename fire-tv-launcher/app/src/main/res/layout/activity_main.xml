@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <!-- Ambient glow in the colour of the focused dock app. -->
+    <View
+        android:id="@+id/ambient"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingLeft="@dimen/edge_h"
+        android:paddingTop="@dimen/edge_v"
+        android:paddingRight="@dimen/edge_h">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:id="@+id/left_block"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/greeting"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="4dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.22"
+                    android:textAllCaps="true"
+                    android:textColor="#8CFFFFFF"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextClock
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-thin"
+                        android:format12Hour="h:mm"
+                        android:format24Hour="HH:mm"
+                        android:includeFontPadding="false"
+                        android:letterSpacing="-0.02"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="52sp" />
+
+                    <TextClock
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:layout_marginLeft="6dp"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:format12Hour="a"
+                        android:format24Hour=""
+                        android:letterSpacing="0.08"
+                        android:textAllCaps="true"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="15sp" />
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="26dp"
+                        android:layout_gravity="bottom"
+                        android:layout_marginLeft="16dp"
+                        android:layout_marginRight="16dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="#33FFFFFF" />
+
+                    <TextClock
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:layout_marginBottom="9dp"
+                        android:format12Hour="EEE, MMM d"
+                        android:format24Hour="EEE, d MMM"
+                        android:letterSpacing="0.14"
+                        android:textAllCaps="true"
+                        android:textColor="#A6FFFFFF"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/top_buttons"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignBottom="@id/left_block"
+                android:layout_alignParentRight="true"
+                android:layout_marginBottom="6dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btn_inputs"
+                    style="@style/TopButton"
+                    android:drawableLeft="@drawable/ic_input"
+                    android:text="@string/btn_inputs"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/btn_amazon_home"
+                    style="@style/TopButton"
+                    android:drawableLeft="@drawable/ic_home"
+                    android:text="@string/btn_amazon_home" />
+
+                <TextView
+                    android:id="@+id/btn_settings"
+                    style="@style/TopButton"
+                    android:drawableLeft="@drawable/ic_settings"
+                    android:text="@string/btn_settings" />
+
+                <TextView
+                    android:id="@+id/btn_launcher_settings"
+                    style="@style/TopButton"
+                    android:drawableLeft="@drawable/ic_tune"
+                    android:text="@string/btn_launcher_settings" />
+            </LinearLayout>
+        </RelativeLayout>
+
+        <!-- The dock sits at the bottom; the app grid waits below it until you press Down. -->
+        <ScrollView
+            android:id="@+id/scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="10dp"
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="vertical"
+                android:paddingBottom="40dp">
+
+                <View
+                    android:id="@+id/spacer"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp" />
+
+                <FrameLayout
+                    android:id="@+id/dock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/dock_band"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:minHeight="@dimen/dock_min_h"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp">
+
+                    <TextView
+                        android:id="@+id/favorites_hint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="@string/favorites_hint"
+                        android:textColor="@color/text_dim"
+                        android:visibility="gone" />
+
+                    <HorizontalScrollView
+                        android:id="@+id/favorites_scroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:overScrollMode="never"
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/favorites_row"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:clipChildren="false"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+                </FrameLayout>
+
+                <LinearLayout
+                    android:id="@+id/apps_grid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:orientation="vertical"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="28dp" />
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- Top shelf: the focused dock app's name, positioned above the dock in code. -->
+    <TextView
+        android:id="@+id/hero_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="68dp"
+        android:alpha="0"
+        android:fontFamily="sans-serif-light"
+        android:includeFontPadding="false"
+        android:letterSpacing="-0.02"
+        android:singleLine="true"
+        android:textColor="#FFFFFFFF"
+        android:textSize="48sp" />
+
+    <!-- The single floating glass highlight that glides between tiles. -->
+    <com.smcontop.fastlauncher.GlassView
+        android:id="@+id/glass"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
+        android:alpha="0"
+        android:importantForAccessibility="no" />
+</FrameLayout>

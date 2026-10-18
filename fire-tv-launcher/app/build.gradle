@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Optional release signing key, supplied via environment (e.g. GitHub secrets).
+// Without it, release builds are signed with the standard debug key.
+def keystorePath = System.getenv('FL_KEYSTORE_PATH')
+def hasReleaseKey = keystorePath != null && file(keystorePath).exists()
+
+android {
+    namespace 'com.smcontop.fastlauncher'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.smcontop.fastlauncher'
+        minSdk 25
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('FL_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('FL_KEY_ALIAS')
+                keyPassword System.getenv('FL_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
