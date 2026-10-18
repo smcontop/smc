@@ -19,17 +19,21 @@ final class Prefs {
     private static final String OVERRIDE_HOME = "override_home";
     private static final String BYPASS = "bypass";
 
-    /** Popular streaming apps pinned on first run, if installed. */
+    /**
+     * Apps pinned to the dock on first run, in this order, if installed. Some services ship
+     * different package names on Fire TV and Android TV, so both are listed.
+     */
     private static final String[] DEFAULT_FAVORITES = {
-            "com.netflix.ninja",
-            "com.amazon.firetv.youtube",
-            "com.google.android.youtube.tv",
-            "com.amazon.avod",
-            "com.disney.disneyplus",
-            "com.hulu.plus",
-            "com.wbd.stream",
-            "com.plexapp.android",
-            "org.xbmc.kodi",
+            "com.amazon.firetv.youtube",            // YouTube (Fire TV)
+            "com.google.android.youtube.tv",        // YouTube (Android TV)
+            "com.disney.disneyplus",                // Disney+
+            "com.hulu.plus",                        // Hulu (Fire TV)
+            "com.hulu.livingroomplus",              // Hulu (Android TV)
+            "com.netflix.ninja",                    // Netflix
+            "com.amazon.firebat",                   // Prime Video (Fire OS 7+)
+            "com.amazon.amazonvideo.livingroom",    // Prime Video (Android TV build)
+            "com.amazon.avod",                      // Prime Video (older Fire OS)
+            "com.limelight",                        // Moonlight
     };
 
     private final SharedPreferences sp;
